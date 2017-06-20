@@ -16,7 +16,7 @@ object ModelGenerator {
     println("------------------第一步：初始化spark配置-------------")
     //初始化配置
     val sparkConf = new SparkConf()
-      .setMaster("spark://Master:7077")
+      .setMaster("spark://192.168.209.128:7077")
       .setAppName("ModelGenerator")
       .set("spark.akka.frameSize", "2000")
       .set("spark.network.timeout", "1200")
@@ -99,7 +99,7 @@ object ModelGenerator {
     val sortedSims = sims.top(K)(Ordering.by[(Int, Double), Double]{case (id,similiarity) => similiarity})
     println(sortedSims.mkString("\n"))
     println(titles(itemId))
-    //这一次我们取前11部最相似电影，以排除给定的那部。所以，可以选取列表中的第1到11项
+    /* 这一次我们取前11部最相似电影，以排除给定的那部。所以，可以选取列表中的第1到11项*/
     val sortedSims2 = sims.top(K+1)(Ordering.by[(Int, Double), Double]{case (id,similiarity) => similiarity})
     println(sortedSims.slice(1,11).map{case (id,sim) => (titles(id),sim)}.mkString("\n"))
     println("=======================物品推荐完成====================================================")
@@ -113,36 +113,33 @@ object ModelGenerator {
       * */
     println("---------------------------第六步：模型评估-----------------------------------------------")
     println("---------------------使用自定义的函数求MSE和RMSE---------------------------------------------")
-    //首先从之前计算的movieForUser这个Ratings集合中找出该用户的第一个评级
+    /* 首先从之前计算的movieForUser这个Ratings集合中找出该用户的第一个评级*/
     val actualRating = moviesForUser.take(1).head
     println(actualRating.rating)
-    //然后，求模型的预计评级
+    /* 然后，求模型的预计评级*/
     val predictedRating = model.predict(789,actualRating.product)
     println(predictedRating)
-    //最后，我们计算实际评级和预计评级的平方误差
+    /* 最后，我们计算实际评级和预计评级的平方误差*/
     val squaredError = math.pow(actualRating.rating-predictedRating,2.0)
-    //整个数据集上的MSE，需要对每一条(user, movie, actual rating, predictedrating)记录都计算该平均误差，然后求和，再除以总的评级次数
+    /* 整个数据集上的MSE，需要对每一条(user, movie, actual rating, predictedrating)记录都计算该平均误差，然后求和，再除以总的评级次数*/
     val usersProducts = ratings.map{case Rating(user, product, rating)  => (user, product)}
     val predictions = model.predict(usersProducts).map{case Rating(user, product, rating) => ((user, product), rating)}
-    //这个RDD的主键为“用户-物品”对，键值为相应的实际评级和预计评级。
+    /*这个RDD的主键为“用户-物品”对，键值为相应的实际评级和预计评级。*/
     val ratingsAndPredictions = ratings.map{ case Rating(user, product, rating) => ((user, product), rating)
     }.join(predictions)
-    //最后，求上述MSE。先用reduce来对平方误差求和，然后再除以count函数所求得的总记录数。
+    /* 最后，求上述MSE。先用reduce来对平方误差求和，然后再除以count函数所求得的总记录数。*/
     var MSE = ratingsAndPredictions.map{case((user,product),(actual,predicted)) => math.pow(actual-predicted,2.0)}.reduce(_+_)/ratingsAndPredictions.count()
     println("Mean Squared Error = "+MSE)
-    //均跟方误差
     val RMSE = math.sqrt(MSE)
     println("Root Mean Squared Error = " + RMSE)
 
     println("--------------------------计算MAPK指标------------------------------------------------------------")
-
-
-
-
-
-
-
-
+    /*首先提取出用户实际评级过的电影ID*/
+    val actualMovies = moviesForUser.map(_.product)
+    /*然后提取出推荐的物品列表，K设置为10*/
+    val predictedMovies = topKRecs.map(_.product)
+    /*最后计算平均准确率APK*/
+    val apk10 = avgPrecisionK(actualMovies, predictedMovies, 10)
 
     println("--------------------使用MLlib下的RegressionMetrics和RankingMetrics内置的评估函数---------------------")
     //实际中MLlib下的RegressionMetrics和RankingMetrics类也提供了相应的函数
@@ -153,8 +150,34 @@ object ModelGenerator {
     println(regressionMetrics.meanSquaredError)
     println(regressionMetrics.rootMeanSquaredError)
   }
-  //求两个向量的余弦度，。1表示完全相似，0表示两者互不相关（即无相似性）
-  def cosineSimilarit(vec1: DoubleMatrix, vec2: DoubleMatrix):Double={
-    vec1.dot(vec2)/(vec1.norm2() * vec2.norm2())
+
+}
+
+/**
+  * 求两个向量的余弦度，。1表示完全相似，0表示两者互不相关（即无相似性）
+  *
+  **/
+def cosineSimilarit(vec1: DoubleMatrix, vec2: DoubleMatrix): Double = {
+  vec1.dot(vec2) / (vec1.norm2() * vec2.norm2())
+}
+
+/**
+  * 计算APK的代码，
+  * 该函数包含两个数组。一个以各个物品及其评级为内容，另一个以模型所预测的物品及其评级为内容。
+  */
+def avgPrecisionK(actual: Seq[Int], predicted: Seq[Int], k: Int): Double = {
+  val predK = predicted.take(k)
+  var score = 0.0
+  var numHits = 0.0
+  for ((p, i) <- predK.zipWithIndex) {
+    if (actual.contains(p)) {
+      numHits += 1.0
+      score += numHits / (i.toDouble + 1.0)
+    }
+  }
+  if (actual.isEmpty) {
+    1.0
+  } else {
+    score / scala.math.min(actual.size, k).toDouble
   }
 }
