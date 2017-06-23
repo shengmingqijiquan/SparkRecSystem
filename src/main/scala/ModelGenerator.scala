@@ -9,12 +9,13 @@ import org.jblas.DoubleMatrix
   */
 object ModelGenerator {
   def main(args: Array[String]) {
-    /** 第一步：初始化spark配置
-    * 1.新建常量sparkConf
-    * 2.根据sparkConf配置信息生成sparkContext
-    * */
+    /**
+      * 第一步：初始化spark配置
+      * 1.新建常量sparkConf
+      * 2.根据sparkConf配置信息生成sparkContext
+      **/
     println("------------------第一步：初始化spark配置-------------")
-    //初始化配置
+
     val sparkConf = new SparkConf()
       .setMaster("spark://192.168.209.128:7077")
       .setAppName("ModelGenerator")
@@ -22,18 +23,21 @@ object ModelGenerator {
       .set("spark.network.timeout", "1200")
     val sparkContext = new SparkContext(sparkConf)
 
-    /** 第二步：导入数据集
-      * 1.导入数据集，并筛选出所需要的的数据集
+    /**
+      * 第二步：导入数据集
+      * 1.导入数据集，然后进行切割、映射并筛选出所需要的的数据集
       * */
     println("------------------第二步：导入本地数据集----------------")
     val rawData = sparkContext.textFile("G:\\ml-100k\\u.data")
-    rawData.first()//返回第一个元素
+    /*返回第一个元素*/
+    rawData.first()
     /* 取出u.data中除了时间戳的数据*/
     val rawRatings = rawData.map(_.split("\t").take(3))
     /*使用scala模式匹配的将原始的评级数据转换为所需要的RDD[Rating]*/
     val ratings = rawRatings.map { case Array(user, movie, rating) => Rating(user.toInt, movie.toInt, rating.toDouble) }
 
-    /** 第三步：训练模型
+    /**
+      * 第三步：训练模型
       * 1.根据筛选的数据集，训练推荐模型
       * 2.设置ALS的参数
       *     rank=50, iterations=10, lambda=0.01
@@ -42,9 +46,7 @@ object ModelGenerator {
       *     lambda：该参数控制模型的正则化过程，从而控制模型的过拟合情况。其值越高，正则化越严厉
       * */
     println("------------------第三步：训练模型----------------")
-    /** ALS.train()返回一个MatrixFactorizationModel对象，该对象将用户因子和物品因子分别保存在一个（id，factor）对类型的RDD中。
-      * 它们分别称作userFeatures和productFeature
-      * */
+    /*ALS.train()返回一个MatrixFactorizationModel对象，该对象将用户因子和物品因子分别保存在一个（id，factor）对类型的RDD中。它们分别称作userFeatures和productFeature*/
     val model = ALS.train(ratings,50,10,0.01)
     /* Inspect the user factors */
     model.userFeatures
@@ -83,17 +85,15 @@ object ModelGenerator {
     moviesForUser.sortBy(-_.rating).take(10).map(rating => (titles(rating.product),rating.rating)).foreach(println)//实际中789用户已经看的
     topKRecs.map(rating => (titles(rating.product),rating.rating)).foreach(println)//推荐系统中推荐的 通过上下对比
     println("===========================推荐检验结束================================================")
-    /**
-      * 物品推荐，采用jblas线性代数库来求向量点积，利用余弦相似度衡量相似度
-      * */
+    /*物品推荐，采用jblas线性代数库来求向量点积，利用余弦相似度衡量相似度*/
     val itemId = 567
     val itemFactor = model.productFeatures.lookup(itemId).head
-    val itemVector = new DoubleMatrix(itemFactor)//用该对象来计算它与自己的相似度
+    val itemVector = new DoubleMatrix(itemFactor)
     cosineSimilarit(itemVector,itemVector)
     val sims = model.productFeatures.map{case (id,factor) =>
       val factorVector = new DoubleMatrix(factor)
       val sim = cosineSimilarit(itemVector,factorVector)
-      (id,sim)//计算其他物品的相似度
+      (id, sim)
     }
     /*对物品的相似度进行排序，然后取出与物品567最相似的前10个商品*/
     val sortedSims = sims.top(K)(Ordering.by[(Int, Double), Double]{case (id,similiarity) => similiarity})
@@ -151,33 +151,28 @@ object ModelGenerator {
     println(regressionMetrics.rootMeanSquaredError)
   }
 
-}
+  /*求两个向量的余弦度，。1表示完全相似，0表示两者互不相关（即无相似性）*/
+  def cosineSimilarit(vec1: DoubleMatrix, vec2: DoubleMatrix): Double = {
+    vec1.dot(vec2) / (vec1.norm2() * vec2.norm2())
+  }
 
-/**
-  * 求两个向量的余弦度，。1表示完全相似，0表示两者互不相关（即无相似性）
-  *
-  **/
-def cosineSimilarit(vec1: DoubleMatrix, vec2: DoubleMatrix): Double = {
-  vec1.dot(vec2) / (vec1.norm2() * vec2.norm2())
-}
-
-/**
-  * 计算APK的代码，
-  * 该函数包含两个数组。一个以各个物品及其评级为内容，另一个以模型所预测的物品及其评级为内容。
-  */
-def avgPrecisionK(actual: Seq[Int], predicted: Seq[Int], k: Int): Double = {
-  val predK = predicted.take(k)
-  var score = 0.0
-  var numHits = 0.0
-  for ((p, i) <- predK.zipWithIndex) {
-    if (actual.contains(p)) {
-      numHits += 1.0
-      score += numHits / (i.toDouble + 1.0)
+  /*计算APK的代码，该函数包含两个数组。一个以各个物品及其评级为内容，另一个以模型所预测的物品及其评级为内容。*/
+  def avgPrecisionK(actual: Seq[Int], predicted: Seq[Int], k: Int): Double = {
+    val predK = predicted.take(k)
+    var score = 0.0
+    var numHits = 0.0
+    for ((p, i) <- predK.zipWithIndex) {
+      if (actual.contains(p)) {
+        numHits += 1.0
+        score += numHits / (i.toDouble + 1.0)
+      }
+    }
+    if (actual.isEmpty) {
+      1.0
+    } else {
+      score / scala.math.min(actual.size, k).toDouble
     }
   }
-  if (actual.isEmpty) {
-    1.0
-  } else {
-    score / scala.math.min(actual.size, k).toDouble
-  }
+
 }
+
