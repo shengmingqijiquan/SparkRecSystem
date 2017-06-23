@@ -1,16 +1,16 @@
-**工程简介**
-
+**Spark推荐引擎V1.0版本简介**
 本工程基于Spark2.1.1+Scala2.11.7版本编写，主要包含四个模块，分别为SparkRecSystem（推荐系统）、SparkRegModel（回归模型）、SparkClaModel（分类模型）、SparkCluModel（聚类模型）。基本上涵盖了常用的数据挖掘的应用场景。每个模块均使用Scala、Java和Python三种语言实现。
-
 **SparkRecSystem** 
 1. 选择推荐模型
    * 基于内容的过滤
    * 协同过滤
    * 矩阵分解【本项目重点关注】
 2. 程序工作流程
-   1. 初始化spark集群配置
-   2. 导入数据
-   3. 提取有效特征
-   4. 训练推荐模型
-   5. 调用推荐模型
-   6. 模型效果评估
+   1. 初始化sparkConf，建立sparkContext
+   2. 导入数据集，对数据集进行split、map等操作
+   3. 训练模型，设置算法的参数
+   4. 调用推荐模型。为用户推荐相似物品
+   5. 模型效果评估，
+    * 使用自定义的函数求MSE和RMSE
+    * 计算MAPK指标
+    * 使用MLlib下的RegressionMetrics和RankingMetrics内置的评估函数

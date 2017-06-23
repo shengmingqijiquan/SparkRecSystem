@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="sparkrecsystem:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/sparkrecsystem_jar</output-path>
+    <root id="archive" name="sparkrecsystem.jar">
+      <element id="module-output" name="sparkrecsystem" />
+    </root>
+  </artifact>
+</component>
